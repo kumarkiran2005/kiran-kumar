@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login and Distance Calculator</title>
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+            color: #fff;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+            color: #333;
+        }
+
+        h1, h2 {
+            margin-bottom: 20px;
+            font-weight: bold;
+            color: #444;
+        }
+
+        button, input, select {
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 16px;
+            border-radius: 5px;
+            border: none;
+            width: 90%;
+        }
+
+        button {
+            background-color: #6a11cb;
+            color: #fff;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #2575fc;
+        }
+
+        input, select {
+            background-color: #f9f9f9;
+            border: 1px solid #ccc;
+        }
+
+        #distanceDisplay {
+            font-weight: bold;
+            margin-top: 20px;
+            color: #444;
+        }
+
+        #errorMessage {
+            color: red;
+            font-size: 14px;
+            margin-top: -10px;
+            margin-bottom: 10px;
+            display: none;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        canvas {
+            margin-top: 20px;
+            border: 2px solid #6a11cb;
+            border-radius: 8px;
+        }
+
+        .google-login-container {
+            margin-top: 20px;
+        }
+
+        .g_id_signin {
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Section -->
+    <div class="container" id="loginContainer">
+        <h1>Login</h1>
+        <button id="startLoginButton">Login with Mobile Number</button>
+        <div class="google-login-container">
+            <h2>Or</h2>
+            <div id="g_id_onload"
+                 data-client_id="YOUR_CLIENT_ID.apps.googleusercontent.com"
+                 data-context="signin"
+                 data-callback="handleCredentialResponse"
+                 data-auto_prompt="false">
+            </div>
+            <div class="g_id_signin"
+                 data-type="standard"
+                 data-shape="rectangular"
+                 data-theme="outline"
+                 data-text="sign_in_with"
+                 data-size="large"
+                 data-logo_alignment="left">
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Number Input Section -->
+    <div class="container hidden" id="numberContainer">
+        <h1>Enter Mobile Number</h1>
+        <select id="countryCode">
+            <option value="+1">+1 (USA)</option>
+            <option value="+91" selected>+91 (India)</option>
+            <option value="+44">+44 (UK)</option>
+        </select>
+        <input type="text" id="mobileNumber" placeholder="Enter mobile number">
+        <button id="submitLoginButton">Submit</button>
+        <p id="errorMessage">Please enter a valid mobile number.</p>
+    </div>
+
+    <!-- Upload Image and Distance Calculation Section -->
+    <div class="container hidden" id="uploadContainer">
+        <h1>Upload Image</h1>
+        <input type="file" id="imageUpload" accept="image/*">
+        <canvas id="imageCanvas" width="500" height="500"></canvas>
+        <div id="distanceDisplay">Distance: 0 cm</div>
+    </div>
+
+    <script>
+        const startLoginButton = document.getElementById('startLoginButton');
+        const numberContainer = document.getElementById('numberContainer');
+        const loginContainer = document.getElementById('loginContainer');
+        const submitLoginButton = document.getElementById('submitLoginButton');
+        const mobileNumberInput = document.getElementById('mobileNumber');
+        const countryCodeSelect = document.getElementById('countryCode');
+        const errorMessage = document.getElementById('errorMessage');
+        const uploadContainer = document.getElementById('uploadContainer');
+        const imageUpload = document.getElementById('imageUpload');
+        const imageCanvas = document.getElementById('imageCanvas');
+        const distanceDisplay = document.getElementById('distanceDisplay');
+        
+        let ctx, point1, point2;
+
+        // Known reference object data
+        const referenceLengthInCm = 10; // e.g., 10 cm
+        const referenceLengthInPixels = 200; // e.g., 200 pixels
+
+        // Calculate scale
+        const scale = referenceLengthInCm / referenceLengthInPixels;
+
+        // Display the mobile number input after clicking "Start Login"
+        startLoginButton.addEventListener('click', () => {
+            loginContainer.classList.add('hidden');
+            numberContainer.classList.remove('hidden');
+        });
+
+        // Handle submit login button (no backend validation)
+        submitLoginButton.addEventListener('click', () => {
+            const mobileNumber = mobileNumberInput.value.trim();
+            const countryCode = countryCodeSelect.value;
+
+            if (/^\d{10}$/.test(mobileNumber)) {
+                numberContainer.classList.add('hidden');
+                uploadContainer.classList.remove('hidden');
+            } else {
+                errorMessage.style.display = 'block';
+            }
+        });
+
+        // Handle image upload (without backend)
+        imageUpload.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    imageCanvas.width = img.width;
+                    imageCanvas.height = img.height;
+                    ctx = imageCanvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Click on the image to select points and calculate distance
+        imageCanvas.addEventListener('click', (event) => {
+            const rect = imageCanvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            if (!point1) {
+                point1 = { x, y };
+                drawPoint(x, y, 'red');
+            } else if (!point2) {
+                point2 = { x, y };
+                drawPoint(x, y, 'blue');
+                drawLine(point1, point2);
+                calculateDistance(point1, point2);
+            } else {
+                ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+                point1 = { x, y };
+                point2 = null;
+                drawPoint(x, y, 'red');
+            }
+        });
+
+        function drawPoint(x, y, color) {
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, 2 * Math.PI);
+            ctx.fillStyle = color;
+            ctx.fill();
+        }
+
+        function drawLine(p1, p2) {
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = 'blue';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function calculateDistance(p1, p2) {
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const pixelDistance = Math.sqrt(dx * dx + dy * dy);
+
+            // Convert pixel distance to real-world distance
+            const realDistance = pixelDistance * scale;
+            distanceDisplay.innerText = `Distance: ${realDistance.toFixed(2)} cm`;
+        }
+
+        // Google Login Callback
+        function handleCredentialResponse(response) {
+            const token = response.credential;
+            const decodedToken = JSON.parse(atob(token.split('.')[1]));
+            const userEmail = decodedToken.email;
+            const userName = decodedToken.name;
+
+            alert(`Logged in as: ${userName} (${userEmail})`);
+
+            // Transition to the next container
+            loginContainer.classList.add('hidden');
+            uploadContainer.classList.remove('hidden');
+        }
+    </script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</body>
+</html>
